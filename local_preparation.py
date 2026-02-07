@@ -30,6 +30,7 @@ def prepare_and_save_datasets():
     # A. 从WRDS获取核心数据 (价格 + 基本面)
     print("\n[A] 从WRDS获取价格与基本面数据...")
     
+    '''
     # 获取WRDS用户名（如果未在配置中设置）
     wrds_username = Config.WRDS_USERNAME
     if wrds_username is None:
@@ -43,13 +44,27 @@ def prepare_and_save_datasets():
         Config.START_DATE, 
         Config.END_DATE
     )
-    
+    crsp_data.to_parquet('./data/wrds_raw/crsp_data.parquet')
+
+    funda_data = wrds_fetcher.fetch_compustat_fundamentals( Config.TECH_TICKERS, 
+        Config.START_DATE, 
+        Config.END_DATE)
+    funda_data.to_parquet('./data/wrds_raw/compustat_fundamentals.parquet')
+
     # 获取标普500指数作为基准
     sp500_data = wrds_fetcher.fetch_sp500_index(Config.START_DATE, Config.END_DATE)
+    sp500_data.to_parquet('./data/wrds_raw/sp500_index.parquet')
+    wrds_fetcher.close()
+    '''
+    #read from local files
+    crsp_data=pd.read_parquet('./data/wrds_raw/crsp_data.parquet')
+    sp500_data=pd.read_parquet('./data/wrds_raw/sp500_index.parquet')
+    funda_data=pd.read_parquet('./data/wrds_raw/compustat_fundamentals.parquet')
     
     # B. 从本地Eikon获取IBES分析师数据
     print("\n[B] 从本地Eikon获取IBES分析师预期数据...")
     
+    '''
     # 获取Eikon App Key（如果未在配置中设置）
     eikon_app_key = Config.EIKON_APP_KEY
     if eikon_app_key is None:
@@ -59,8 +74,9 @@ def prepare_and_save_datasets():
     
     # 使用Eikon获取分析师预测
     analyst_data = eikon_fetcher.fetch_analyst_estimates(Config.TECH_TICKERS)
-    
-    wrds_fetcher.close()
+    analyst_data.to_parquet('./data/eikon_raw/analyst_data.parquet')
+    '''
+    analyst_data=pd.read_parquet('./data/eikon_raw/analyst_data.parquet')
     
     # C. 特征工程 (整合WRDS价格 + Eikon分析师数据)
     print("\n[C] 特征工程 - 整合所有数据源...")
@@ -299,7 +315,7 @@ def process_analyst_features(analyst_data, date_index, price_pivot):
     
     return result_df
     
-
+#checked
 def create_labels_from_wrds(price_pivot, sp500_data, prediction_horizon):
     """创建标签：未来N日超额收益"""
     # 对齐标普500数据
@@ -310,6 +326,7 @@ def create_labels_from_wrds(price_pivot, sp500_data, prediction_horizon):
     sp500_data.index = pd.to_datetime(sp500_data.index)
     price_pivot.index = pd.to_datetime(price_pivot.index)
     
+    '''
     if 'sp500_total_return' in sp500_data.columns:
         benchmark_prices = sp500_data['sp500_total_return']
     elif 'sp500_return' in sp500_data.columns:
@@ -318,6 +335,8 @@ def create_labels_from_wrds(price_pivot, sp500_data, prediction_horizon):
         # 如果没有标普500数据，使用等权组合作为基准
         print("警告: 使用等权组合作为基准")
         benchmark_prices = price_pivot.mean(axis=1)
+    '''
+    benchmark_prices= (1 + sp500_data['sp500_total_return']).cumprod()
     
     # 计算未来超额收益
     labels_dict = {}
@@ -342,6 +361,7 @@ def create_labels_from_wrds(price_pivot, sp500_data, prediction_horizon):
         labels_dict[f'{ticker}_EXCESS'] = excess_return
     
     labels_df = pd.DataFrame(labels_dict).dropna()
+    labels_df.to_csv(f'./data/compustat_fundamentals.csv')
     print(f"标签创建完成: {labels_df.shape[1]}个标签")
     return labels_df
 

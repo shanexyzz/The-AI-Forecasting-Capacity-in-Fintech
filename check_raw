@@ -1,0 +1,78 @@
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+import warnings
+warnings.filterwarnings('ignore')
+import sys
+import os
+import json
+from local_preparation import calculate_technical_features
+
+'''
+df = pd.read_parquet('./data_for_colab/features.parquet')
+date_col = 'date'
+if date_col in df.columns:
+    # 强制把数字转换为日期对象
+    # unit='ms' 代表毫秒，是金融数据最常用的单位。
+    # 如果转换出来的年份不对（比如是 1970 年），试着改成 unit='s' (秒) 或 unit='ns' (纳秒)
+    df[date_col] = pd.to_datetime(df[date_col], unit='ms')
+
+#df.to_csv(f'./data/compustat_fundamentals.csv')
+print(df.head())
+'''
+
+prediction_horizon = 5 
+
+crsp_data = pd.read_parquet('./data/wrds_raw/crsp_data.parquet')
+sp500_data = pd.read_parquet('./data/wrds_raw/sp500_index.parquet')
+price_pivot = crsp_data.pivot_table(
+        index='date', 
+        columns='ticker', 
+        values='adj_prc'
+    )
+print(price_pivot.head())
+
+"""创建标签：未来N日超额收益"""
+# 对齐标普500数据
+if 'date' in sp500_data.columns:
+    sp500_data.set_index('date', inplace=True)
+
+# 确保索引是datetime
+sp500_data.index = pd.to_datetime(sp500_data.index)
+price_pivot.index = pd.to_datetime(price_pivot.index)
+
+
+benchmark_prices= (1 + sp500_data['sp500_total_return']).cumprod()
+
+# 计算未来超额收益
+labels_dict = {}
+
+for ticker in price_pivot.columns:
+    stock_prices = price_pivot[ticker]
+    
+    # 对齐日期
+    aligned_idx = stock_prices.index.intersection(benchmark_prices.index)
+    stock_aligned = stock_prices[aligned_idx]
+    stock_aligned.to_csv(f'./data/stock_aligned_{ticker}.csv')
+    bench_aligned = benchmark_prices[aligned_idx]
+    bench_aligned.to_csv(f'./data/bench_aligned.csv')
+
+    # 计算未来累计超额收益
+    # 股票未来收益
+    stock_future = stock_aligned.shift(-prediction_horizon) / stock_aligned - 1
+    print(ticker)
+    print(stock_future.head())
+    
+    # 基准未来收益
+    bench_future = bench_aligned.shift(-prediction_horizon) / bench_aligned - 1
+    print(bench_future.head())
+    
+    # 超额收益
+    excess_return = stock_future - bench_future
+    labels_dict[f'{ticker}_EXCESS'] = excess_return
+
+#labels_df = pd.DataFrame(labels_dict).dropna()
+labels_df = pd.DataFrame(labels_dict)
+labels_df.to_csv(f'./data/labels_df.csv')
+print(f"标签创建完成: {labels_df.shape[1]}个标签")
+

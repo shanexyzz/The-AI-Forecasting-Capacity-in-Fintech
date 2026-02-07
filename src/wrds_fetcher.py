@@ -197,11 +197,16 @@ class WRDSFetcher:
 
 # 使用示例
 if __name__ == '__main__':
+    # Create the directory if it doesn't exist
+    output_path = './data/wrds_raw'
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+        print(f"Created directory: {output_path}")
     # 初始化连接（首次会提示输入密码）
     fetcher = WRDSFetcher(wrds_username='your_username')
     
     # 定义股票列表（使用CRSP中的TICKER）
-    tech_tickers = ['AAPL', 'MSFT', 'AMZN', 'GOOGL', 'META', 'NVDA', 'TSLA']
+    tech_tickers = ['AAPL', 'MSFT', 'AMZN', 'GOOGL', 'META', 'NVDA', 'TSLA','FB']
     
     # 获取数据
     price_data = fetcher.fetch_crsp_data(tech_tickers)
@@ -209,10 +214,26 @@ if __name__ == '__main__':
     ibes_data = fetcher.fetch_ibes_estimates(tech_tickers)
     sp500_data = fetcher.fetch_sp500_index()
     
+    '''
     # 保存数据
     price_data.to_parquet('./data/wrds_raw/crsp_prices.parquet')
     funda_data.to_parquet('./data/wrds_raw/compustat_fundamentals.parquet')
     ibes_data.to_parquet('./data/wrds_raw/ibes_estimates.parquet')
     sp500_data.to_parquet('./data/wrds_raw/sp500_index.parquet')
+    '''
+    files = {
+        "crsp_prices.parquet": price_data,
+        "compustat_fundamentals.parquet": funda_data,
+        "ibes_estimates.parquet": ibes_data,
+        "sp500_index.parquet": sp500_data
+    }
+
+    for filename, df in files.items():
+        if df is not None and not df.empty:
+            full_file_path = os.path.join(output_path, filename)
+            df.to_parquet(full_file_path)
+            print(f"Successfully saved: {full_file_path} ({len(df)} rows)")
+        else:
+            print(f"Warning: {filename} is empty and was not saved.")
     
     fetcher.close()
